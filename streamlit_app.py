@@ -3,227 +3,242 @@ import json
 import streamlit as st
 import altair as alt
 
-# Mapping dictionary to standardize subject names
-subject_mapping = {
-    "Maths": ["maths", "Maths", "Maths [[गणित]]", "math"],
-    "Science and Technology": ["science-and-technology","science and technology", "Science and Technology", "science & technology", "Science and Technology [[विज्ञान तथा प्रविधि]]"],
-    "नेपाली": ["नपल", "नेपाली"],
-    "English": ["english"],
-    "Social Studies and Human Value Education": ["social-studies-and-human-value-education"],
-    "Health Physical And Creative Arts": ["health-physical-and-creative-arts"],
-    "Social Studies and Life Skills Education": ["social-studies-and-life-skills-education"],
-    "Social Studies": ["social-studies"]
-}
+for_offline_use = False
 
-# Function to standardize subject names
-def standardize_subject(subject):
-    for standard_subject, variants in subject_mapping.items():
-        if subject in variants:
-            return standard_subject
-    return subject
-
-def load_and_normalize(file_path):
+def extract_content_from_json(file_path, records=[], for_offline_use=for_offline_use):
+    """
+    Returns appended records list.
+    """
     with open(file_path, 'r', encoding='utf-8') as file:
         data = json.load(file)
-
-    # Function to normalize each chapter's content
-    def normalize_content(chapter_contents, grade, subject, chapter_slug):
-        standardized_subject = standardize_subject(subject)
-        contents = []
-        for content in chapter_contents:
-            base_info = {
-                'mainid': content.get('id'),
-                'title': content.get('title'),
-                'type': content.get('type'),
-                'grade': grade,
-                'subject': standardized_subject,
-                'chapter_slug': chapter_slug
-            }
-            if content['type'] == 'document':
-                for file_info in content.get('file_upload', []):
-                    content_info = base_info.copy()
-                    content_info.update({
-                        'file_id': file_info.get('id'),
-                        'name': file_info.get('name'),
-                        'grade': file_info.get('grade'),
-                        'subject': standardized_subject,
-                        'chapter_slug': file_info.get('chapter_slug'),
-                        'type': file_info.get('type'),
-                        'link': 'https://pustakalaya.org' + str(file_info.get('link'))
-                    })
-                    contents.append(content_info)
-            elif content['type'] == 'audio':
-                for file_info in content.get('file_upload', []):
-                    content_info = base_info.copy()
-                    content_info.update({
-                        'file_id': file_info.get('id'),
-                        'name': file_info.get('name'),
-                        'grade': file_info.get('grade'),
-                        'subject': standardized_subject,
-                        'chapter_slug': file_info.get('chapter_slug'),
-                        'link': 'https://pustakalaya.org' + str(file_info.get('link'))
-                    })
-                    contents.append(content_info)
-            elif content['type'] == 'video':
-                content_info = base_info.copy()
-                content_info.update({
-                    'link': 'https://pustakalaya.org/videos/detail/' + content.get('id')
-                })
-                contents.append(content_info)
-            elif content['type'] == 'interactive':
-                content_info = base_info.copy()
-                content_info.update({
-                    'grade': content.get('grade'),
-                    'subject': standardized_subject,
-                    'chapter_slug': content.get('chapter_slug'),
-                    'link': content.get('online_domain') + content.get('link_to_content')
-                })
-                contents.append(content_info)
-        return contents
-
-    # Extracting and normalizing data
-    all_contents = []
     for grade, subjects in data.items():
-        for subject, chapters in subjects.items():
-            for chapter, chapter_contents in chapters.items():
-                all_contents.extend(normalize_content(chapter_contents, grade, subject, chapter))
-    
-    return all_contents
+        for subject, contents_list in subjects.items():
+            for contents_list_no, contents in contents_list.items():
+                for content in contents:
+                    base_record = {
+                        'content_id': content.get('id'),
+                        'title': content.get('title'),
+                        'type': content.get('type')
+                    }
+                    if content.get('type') == 'interactive': 
+                        record = base_record.copy()
+                        record.update({
+                            'grade': content.get('grade'),
+                            'subject': content.get('subject'),
+                            'chapter': content.get('chapter'),
+                            'chapter_slug': content.get('chapter_slug'),
+                            'content_link': content.get('offline_domain') + content.get('link_to_content') if for_offline_use else content.get('online_domain') + content.get('link_to_content'),
+                            'name': 'NA',
+                            'file_id': 'NA',
+                        })
+                        records.append(record)
+                    elif content.get('type') == 'document' or content.get('type') == 'audio': 
+                        for file_info in content.get('file_upload', []):
+                            record = base_record.copy()
+                            record.update({
+                                'grade': file_info.get('grade'),
+                                'subject': file_info.get('subject'),
+                                'chapter': file_info.get('chapter'),
+                                'chapter_slug': file_info.get('chapter_slug'),
+                                'name': file_info.get('name'),
+                                'file_id': file_info.get('id'),
+                                'content_link': 'http://172.18.96.1' + str(file_info.get('link')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('link'))
+                            })
+                            records.append(record)
+                    elif content.get('type') == 'video':
+                        source_key = 'file_upload' if for_offline_use else 'embed_link'
+                        base_url = 'http://172.18.96.1' if for_offline_use else ''
+                        for file_info in content.get(source_key, []):
+                            record = base_record.copy()
+                            record.update({
+                                'grade': file_info.get('grade'),
+                                'subject': file_info.get('subject'),
+                                'chapter': file_info.get('chapter'),
+                                'chapter_slug': file_info.get('chapter_slug'),
+                                'name': file_info.get('name'),
+                                'file_id': file_info.get('id'),
+                                'content_link': base_url + str(file_info.get('link'))
+                            })
+                            records.append(record)
+    return records
 
-
-# Load and process all files
+# Process all files and concatenate the data
 file_paths = ['grade6.json', 'grade7.json', 'grade8.json', 'grade9.json', 'grade10.json', 'grade11.json', 'grade12.json']
-all_contents = []
+all_df = pd.DataFrame()
 for file_path in file_paths:
-    all_contents.extend(load_and_normalize(file_path))
+    records = extract_content_from_json(file_path, for_offline_use=for_offline_use, records=[])
+    df = pd.DataFrame(records)
+    all_df = pd.concat([all_df, df], ignore_index=True)
 
-# Create DataFrame
-df = pd.DataFrame(all_contents)
+df = all_df #redefining as df
 
 # Streamlit app
-st.title("Educational Content Browser")
+st.title("OLE Nepal Content Browser")
 
 # Sidebar filters
 st.sidebar.header("Filters")
-grades = st.sidebar.multiselect("Select Grade", options=df['grade'].unique(), default=df['grade'].unique())
-subjects = st.sidebar.multiselect("Select Subject", options=df['subject'].unique(), default=df['subject'].unique())
-types = st.sidebar.multiselect("Select Content Type", options=df['type'].unique(), default=df['type'].unique())
 
-# Filter DataFrame based on selections
-filtered_df = df[df['grade'].isin(grades) & df['subject'].isin(subjects) & df['type'].isin(types)]
+# Language selection dropdown
+language = st.sidebar.selectbox("Select Language", options=["English", "Nepali"])
 
-# Dynamically update chapters based on selected grade and subject
-chapters = filtered_df['chapter_slug'].unique()
+# Function to parse subject and chapter based on selected language
+def parse_language(df, language):
+    if language == "English":
+        df['subject'] = df['subject'].apply(lambda x: x.split('[')[0].strip())
+        df['chapter'] = df['chapter'].apply(lambda x: x.split('[')[0].strip())
+    else:
+        df['subject'] = df['subject'].apply(lambda x: x.split('[[')[1].split(']]')[0].strip() if '[[' in x else x)
+        df['chapter'] = df['chapter'].apply(lambda x: x.split('[[')[1].split(']]')[0].strip() if '[[' in x else x)
+    return df
+
+# Apply language parsing
+df = parse_language(df, language)
+
+# Single-select for Grade
+grade = st.sidebar.selectbox("Select Grade", options=["All"] + list(df['grade'].unique()))
+if grade != "All":
+    filtered_df = df[df['grade'] == grade]
+else:
+    filtered_df = df.copy()
+
+# Single-select for Subject
+subject = st.sidebar.selectbox("Select Subject", options=["All"] + list(filtered_df['subject'].unique()))
+if subject != "All":
+    filtered_df = filtered_df[filtered_df['subject'] == subject]
+
+# Multi-select for Content Type using checkboxes
+st.sidebar.subheader("Select Content Type")
+content_types = df['type'].unique()
+selected_types = []
+for content_type in content_types:
+    if st.sidebar.checkbox(content_type, value=True):
+        selected_types.append(content_type)
+if selected_types:
+    filtered_df = filtered_df[filtered_df['type'].isin(selected_types)]
+
+# Multi-select for Chapter
+chapters = filtered_df['chapter'].unique()
 selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapters, default=chapters)
-
-# Further filter DataFrame based on selected chapters
 if selected_chapters:
-    filtered_df = filtered_df[filtered_df['chapter_slug'].isin(selected_chapters)]
+    filtered_df = filtered_df[filtered_df['chapter'].isin(selected_chapters)]
 
 # Display total count of activities
 st.write(f"### Total Activities: {len(filtered_df)}")
 
-# Display filtered table with specific columns
-st.write("### Filtered Data")
-st.markdown("""
-<style>
-    .dataframe {
-        width: 100%;
-        overflow-x: auto;
-    }
-    @media (max-width: 768px) {
-        .dataframe table {
-            display: block;
-            overflow-x: auto;
-            white-space: nowrap;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
-st.dataframe(filtered_df[['title', 'grade', 'subject', 'chapter_slug', 'link']], height=300)
+# View selection buttons
+view = st.radio("Select View", options=["Cards", "Table", "Chart"])
 
-# Add a download button
-st.download_button(
-    label="Download data as CSV",
-    data=filtered_df.to_csv(index=False).encode('utf-8'),
-    file_name='filtered_data.csv',
-    mime='text/csv',
-)
-
-# Initialize session state for pagination
-if 'start_idx' not in st.session_state:
-    st.session_state.start_idx = 0
-if 'batch_size' not in st.session_state:
-    st.session_state.batch_size = 9  # Display 9 cards per page (3 rows of 3 cards each)
-
-# Function to render content cards
-def render_content_cards(df, start_idx, batch_size):
-    rows = []
-    for i in range(start_idx, min(start_idx + batch_size, len(df)), 3):
-        row_cards = df.iloc[i:i+3].apply(lambda row: f"""
-            <div class="card">
-                <h4>{row['title']}</h4>
-                <p><strong>Grade:</strong> {row['grade']}</p>
-                <p><strong>Subject:</strong> {row['subject']}</p>
-                <p><strong>Chapter:</strong> {row['chapter_slug']}</p>
-                <p><strong>Type:</strong> {row['type']}</p>
-                <p><a href="{row['link']}" target="_blank">View Content</a></p>
-            </div>
-            """, axis=1).tolist()
-        rows.append("".join(row_cards))
-    
-    # Add responsive styles
+if view == "Table":
+    # Display filtered table with specific columns
+    st.write("### Filtered Data")
     st.markdown("""
     <style>
-    .card {
-        border: 1px solid #e1e4e8; 
-        border-radius: 5px; 
-        padding: 10px; 
-        margin: 10px; 
-        width: 30%; 
-        float: left;
-    }
-    @media (max-width: 768px) {
-        .card {
+        .dataframe {
             width: 100%;
+            overflow-x: auto;
         }
-    }
+        @media (max-width: 768px) {
+            .dataframe table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+        }
     </style>
     """, unsafe_allow_html=True)
+    st.dataframe(filtered_df[['title', 'grade', 'subject', 'chapter', 'content_link']], height=300)
 
-    st.markdown("<div style='display: flex; flex-wrap: wrap;'>", unsafe_allow_html=True)
-    for row in rows:
-        st.markdown(row, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Add a download button
+    st.download_button(
+        label="Download data as CSV",
+        data=filtered_df.to_csv(index=False).encode('utf-8'),
+        file_name='filtered_data.csv',
+        mime='text/csv',
+    )
 
-# Display content cards with pagination
-st.write("### Content Cards")
+elif view == "Chart":
+    # Display Altair chart
+    st.write("### Content Distribution by Type")
+    chart = alt.Chart(filtered_df).mark_bar().encode(
+        x='type',
+        y='count()',
+        color='type'
+    ).properties(
+        width=600,
+        height=400
+    )
 
-col1, col2, col3 = st.columns([1, 2, 1])  # Adjust column widths for better layout
-with col1:
-    if st.session_state.start_idx > 0:
-        if st.button('Previous'):
-            st.session_state.start_idx = max(0, st.session_state.start_idx - st.session_state.batch_size)
-with col2:
-    page_number = st.session_state.start_idx // st.session_state.batch_size + 1
-    total_pages = (len(filtered_df) - 1) // st.session_state.batch_size + 1
-    st.write(f"Page {page_number} of {total_pages}")
-with col3:
-    if st.session_state.start_idx + st.session_state.batch_size < len(filtered_df):
-        if st.button('Next'):
-            st.session_state.start_idx = min(len(filtered_df) - st.session_state.batch_size, st.session_state.start_idx + st.session_state.batch_size)
+    st.altair_chart(chart, use_container_width=True)
 
-render_content_cards(filtered_df, st.session_state.start_idx, st.session_state.batch_size)
+elif view == "Cards":
+    # Initialize session state for pagination
+    if 'start_idx' not in st.session_state:
+        st.session_state.start_idx = 0
+    if 'batch_size' not in st.session_state:
+        st.session_state.batch_size = 9  # Display 9 cards per page (3 rows of 3 cards each)
 
-# Display Altair chart
-st.write("### Content Distribution by Type")
-chart = alt.Chart(filtered_df).mark_bar().encode(
-    x='type',
-    y='count()',
-    color='type'
-).properties(
-    width=600,
-    height=400
-)
+    # SVG icons for different content types
+    svg_icons = {
+        'interactive': 'icons/interactive.svg',
+        'document': 'icons/document.svg',
+        'audio': 'icons/audio.svg',
+        'video': 'icons/video.png'
+    }
 
-st.altair_chart(chart, use_container_width=True)
+    # Function to render content cards
+    def render_content_cards(df, start_idx, batch_size):
+        rows = []
+        for i in range(start_idx, min(start_idx + batch_size, len(df)), 3):
+            row_cards = df.iloc[i:i+3].apply(lambda row: f"""
+                <div class="card">
+                    <h4>{row['title']}</h4>
+                    <p><strong>Grade:</strong> {row['grade']}</p>
+                    <p><strong>Subject:</strong> {row['subject']}</p>
+                    <p><strong>Chapter:</strong> {row['chapter']}</p>
+                    <p><strong>Type:</strong> <img src="{svg_icons.get(row['type'], '')}" width="24" height="24" alt="{row['type']} icon"/> {row['type']}</p>
+                    <p><a href="{row['content_link']}" target="_blank">View Content</a></p>
+                </div>
+                """, axis=1).tolist()
+            rows.append("".join(row_cards))
+        
+        st.markdown("""
+        <style>
+        .card {
+            border: 1px solid #e1e4e8; 
+            border-radius: 5px; 
+            padding: 10px; 
+            margin: 10px; 
+            width: 30%; 
+            float: left;
+        }
+        @media (max-width: 768px) {
+            .card {
+                width: 100%;
+            }
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<div style='display: flex; flex-wrap: wrap;'>", unsafe_allow_html=True)
+        for row in rows:
+            st.markdown(row, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Display content cards with pagination
+    st.write("### Content Cards")
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.session_state.start_idx > 0:
+            if st.button('Previous'):
+                st.session_state.start_idx = max(0, st.session_state.start_idx - st.session_state.batch_size)
+    with col2:
+        page_number = st.session_state.start_idx // st.session_state.batch_size + 1
+        total_pages = (len(filtered_df) - 1) // st.session_state.batch_size + 1
+        st.write(f"Page {page_number} of {total_pages}")
+    with col3:
+        if st.session_state.start_idx + st.session_state.batch_size < len(filtered_df):
+            if st.button('Next'):
+                st.session_state.start_idx = min(len(filtered_df) - st.session_state.batch_size, st.session_state.start_idx + st.session_state.batch_size)
+
+    render_content_cards(filtered_df, st.session_state.start_idx, st.session_state.batch_size)
