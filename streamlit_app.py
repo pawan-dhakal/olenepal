@@ -179,10 +179,10 @@ elif view == "Cards":
 
     # SVG icons for different content types
     svg_icons = {
-        'interactive': 'icons/interactive.svg',
-        'document': 'icons/document.svg',
-        'audio': 'icons/audio.svg',
-        'video': 'icons/video.png'
+        'interactive': 'interactive.svg',
+        'document': 'document.svg',
+        'audio': 'audio.svg',
+        'video': 'video.png'
     }
 
     # Function to render content cards
