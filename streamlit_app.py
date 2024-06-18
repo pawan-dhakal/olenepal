@@ -2,6 +2,13 @@ import pandas as pd
 import json
 import streamlit as st
 import altair as alt
+import base64
+
+# Helper function to convert image to base64
+def get_base64_image(image_path):
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    return encoded_string
 
 for_offline_use = False
 
@@ -177,12 +184,12 @@ elif view == "Cards":
     if 'batch_size' not in st.session_state:
         st.session_state.batch_size = 9  # Display 9 cards per page (3 rows of 3 cards each)
 
-    # SVG icons for different content types
-    svg_icons = {
-        'interactive': 'interactive.svg',
-        'document': 'document.svg',
-        'audio': 'audio.svg',
-        'video': 'video.png'
+    # Prepare base64 icons for the different content types
+    icons = {
+        'interactive': get_base64_image('interactive.png'),
+        'document': get_base64_image('document.png'),
+        'audio': get_base64_image('audio.png'),
+        'video': get_base64_image('video.png')
     }
 
     # Function to render content cards
@@ -195,7 +202,7 @@ elif view == "Cards":
                     <p><strong>Grade:</strong> {row['grade']}</p>
                     <p><strong>Subject:</strong> {row['subject']}</p>
                     <p><strong>Chapter:</strong> {row['chapter']}</p>
-                    <p><strong>Type:</strong> <img src="{svg_icons.get(row['type'], '')}" width="24" height="24" alt="{row['type']} icon"/> {row['type']}</p>
+                    <p><strong>Type:</strong> <img src="data:image/png;base64,{icons.get(row['type'], '')}" width="24" height="24" alt="{row['type']} icon"/> {row['type']}</p>
                     <p><a href="{row['content_link']}" target="_blank">View Content</a></p>
                 </div>
                 """, axis=1).tolist()
@@ -208,8 +215,13 @@ elif view == "Cards":
             border-radius: 5px; 
             padding: 10px; 
             margin: 10px; 
-            width: 30%; 
+            width: calc(30% - 20px); 
             float: left;
+        }
+        @media (max-width: 1200px) {
+            .card {
+                width: calc(40% - 20px);
+            }
         }
         @media (max-width: 768px) {
             .card {
