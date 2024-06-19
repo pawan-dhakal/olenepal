@@ -302,7 +302,7 @@ elif view == "Cards":
                     <p style="display: flex; justify-content: center;">
                         <img src="data:image/png;base64,{safe_get_base64_image(row['publisher_logo'])}" height="25" alt="Publisher logo"/>
                     </p>
-                     {'<p>Not in Gradewise</p>' if row.get('not_in_gradewise') == 'Yes' else '<p>Exists already</p>'}
+                     {'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}
                 </div>
                 """, axis=1).tolist()
             rows.append("".join(row_cards))
