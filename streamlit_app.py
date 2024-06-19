@@ -3,18 +3,28 @@ import json
 import streamlit as st
 import altair as alt
 import base64
+import requests
+
 
 # Helper function to convert image to base64
 def get_base64_image(image_path):
-    with open(image_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode()
-    return encoded_string
+    if image_path.startswith('http://') or image_path.startswith('https://'):
+        response = requests.get(image_path)
+        if response.status_code == 200:
+            encoded_string = base64.b64encode(response.content).decode()
+            return encoded_string
+        else:
+            raise FileNotFoundError(f"URL returned status code {response.status_code}: {image_path}")
+    else:
+        with open(image_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        return encoded_string
 
 for_offline_use = False
 
-def extract_content_from_json(file_path, records=[], for_offline_use=for_offline_use):
+def extract_content_from_json(file_path, records=[], for_offline_use=False):
     """
-    Returns appended records list.
+    returns appended records list 
     """
     with open(file_path, 'r', encoding='utf-8') as file:
         data = json.load(file)
@@ -23,7 +33,7 @@ def extract_content_from_json(file_path, records=[], for_offline_use=for_offline
             for contents_list_no, contents in contents_list.items():
                 for content in contents:
                     base_record = {
-                        'content_id': content.get('id'),
+                        'content_id': content.get('id'),  # main id of the content
                         'title': content.get('title'),
                         'type': content.get('type')
                     }
@@ -35,8 +45,9 @@ def extract_content_from_json(file_path, records=[], for_offline_use=for_offline
                             'chapter': content.get('chapter'),
                             'chapter_slug': content.get('chapter_slug'),
                             'content_link': content.get('offline_domain') + content.get('link_to_content') if for_offline_use else content.get('online_domain') + content.get('link_to_content'),
-                            'name': 'NA',
-                            'file_id': 'NA',
+                            'name': 'NA',  # not in 'interactive' type in json files, but in other types
+                            'file_id': 'NA',  # not in 'interactive' type in json files, but in other types
+                            'publisher_logo': 'http://172.18.96.1' + str(content.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(content.get('publisher_logo')),
                         })
                         records.append(record)
                     elif content.get('type') == 'document' or content.get('type') == 'audio': 
@@ -49,24 +60,29 @@ def extract_content_from_json(file_path, records=[], for_offline_use=for_offline
                                 'chapter_slug': file_info.get('chapter_slug'),
                                 'name': file_info.get('name'),
                                 'file_id': file_info.get('id'),
+                                'publisher_logo': 'http://172.18.96.1' + str(file_info.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('publisher_logo')),
                                 'content_link': 'http://172.18.96.1' + str(file_info.get('link')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('link'))
                             })
                             records.append(record)
                     elif content.get('type') == 'video':
+                        # Determine the appropriate content source based on the offline/online flag
                         source_key = 'file_upload' if for_offline_use else 'embed_link'
-                        base_url = 'http://172.18.96.1' if for_offline_use else ''
+                        base_url = 'http://172.18.96.1' if for_offline_use else ''  # youtube link in embed_link
+                        # Loop through the relevant content source and add records
                         for file_info in content.get(source_key, []):
                             record = base_record.copy()
                             record.update({
-                                'grade': file_info.get('grade'),
+                                'grade': grade,  # file_info.get('grade'), #KA videos grade in record maybe different to grade specified in content.
                                 'subject': file_info.get('subject'),
                                 'chapter': file_info.get('chapter'),
                                 'chapter_slug': file_info.get('chapter_slug'),
                                 'name': file_info.get('name'),
                                 'file_id': file_info.get('id'),
-                                'content_link': base_url + str(file_info.get('link'))
+                                'content_link': base_url + str(file_info.get('link')),
+                                'publisher_logo': 'http://172.18.96.1' + str(content.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(content.get('publisher_logo')),
                             })
                             records.append(record)
+
     return records
 
 # Process all files and concatenate the data
@@ -77,7 +93,7 @@ for file_path in file_paths:
     df = pd.DataFrame(records)
     all_df = pd.concat([all_df, df], ignore_index=True)
 
-df = all_df #redefining as df
+df = all_df  # redefining as df
 
 # Streamlit app
 st.title("OLE Nepal Content Browser")
@@ -133,7 +149,7 @@ if selected_chapters:
 st.write(f"### Total Activities: {len(filtered_df)}")
 
 # View selection buttons
-view = st.radio("Select View", options=["Cards", "Table", "Chart"])
+view = st.selectbox("Select View", options=["Cards", "Table", "Chart"])
 
 if view == "Table":
     # Display filtered table with specific columns
@@ -192,18 +208,44 @@ elif view == "Cards":
         'video': get_base64_image('video.png')
     }
 
-    # Function to render content cards
+    
+    # Function to render content cards with modal popup
     def render_content_cards(df, start_idx, batch_size):
         rows = []
+        grade_text = 'Grade' if language=="English" else 'कक्षा'
+        view_content_text = ' View Lesson>>' if language=="English" else ' पाठ हेर्नुहोस्>>'
+        # Function for Nepali numeral conversion with language condition
+        def convert_to_nepali_numeral(text, language):
+            if language == "Nepali":
+                nepali_numerals = {
+                    "1": "१",
+                    "2": "२",
+                    "3": "३",
+                    "4": "४",
+                    "5": "५",
+                    "6": "६",
+                    "7": "७",
+                    "8": "८",
+                    "9": "९",
+                    "10": "१०",
+                    "11": "११",
+                    "12": "१२"
+                }
+                return nepali_numerals.get(text, text)
+            else:
+                return text
         for i in range(start_idx, min(start_idx + batch_size, len(df)), 3):
             row_cards = df.iloc[i:i+3].apply(lambda row: f"""
                 <div class="card">
-                    <h4>{row['title']}</h4>
-                    <p><strong>Grade:</strong> {row['grade']}</p>
-                    <p><strong>Subject:</strong> {row['subject']}</p>
-                    <p><strong>Chapter:</strong> {row['chapter']}</p>
-                    <p><strong>Type:</strong> <img src="data:image/png;base64,{icons.get(row['type'], '')}" width="24" height="24" alt="{row['type']} icon"/> {row['type']}</p>
-                    <p><a href="{row['content_link']}" target="_blank">View Content</a></p>
+                    <h4 style="margin-left: 10px; align-items: center;">{row['title']}</h4>
+                    <p><strong>{grade_text} {convert_to_nepali_numeral(str(row['grade']), language)}, {row['subject']}, {row['chapter']}</strong></p>
+                    <p style="display: flex; align-items: center;">
+                        <img src="data:image/png;base64,{icons.get(row['type'], '')}" width="50" height="50" alt="{row['type']} icon"/>
+                        <strong style="padding:10px"><a href="{row['content_link']}" target="_blank">{view_content_text}</a></strong>
+                    </p>                                        
+                    <p style="display: flex; justify-content: center;">
+                        <img src="data:image/png;base64,{get_base64_image(row['publisher_logo'])}" height="25" alt="Publisher logo"/>
+                    </p>
                 </div>
                 """, axis=1).tolist()
             rows.append("".join(row_cards))
@@ -228,6 +270,38 @@ elif view == "Cards":
                 width: 100%;
             }
         }
+        #modal-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        #modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            max-width: 80%;
+            max-height: 80%;
+            overflow: auto;
+        }
+        #close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: red;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
         </style>
         """, unsafe_allow_html=True)
 
@@ -235,6 +309,8 @@ elif view == "Cards":
         for row in rows:
             st.markdown(row, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
+
+        
 
     # Display content cards with pagination
     st.write("### Content Cards")
