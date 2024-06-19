@@ -95,11 +95,51 @@ for file_path in file_paths:
 
 df = all_df  # redefining as df
 
+# Load additional content from CSV
+additional_content_df = pd.read_csv('additional_content.csv')
+
+# Check for existing content and add new content if it doesn't exist
+existing_links = set(df['content_link'].tolist())
+new_records = []
+
+for _, row in additional_content_df.iterrows():
+    if row['content_link'] not in existing_links:
+        # Find the corresponding chapter in the main dataframe
+        matching_chapter = df[df['chapter_slug'] == row['chapter_slug']]['chapter'].unique()
+        chapter = matching_chapter[0] if len(matching_chapter) > 0 else None
+        if chapter:
+            new_record = {
+                'title': row['title'],
+                'type': row['type'].lower(),
+                'grade': row['grade'],
+                'subject': row['subject'],
+                'content_link': row['content_link'],
+                'chapter_slug': row['chapter_slug'],
+                'chapter': chapter,
+                'not_in_gradewise':'Yes'
+            }
+            new_records.append(new_record)
+    else:
+        print(str(row['title'])+" already exists!")
+
+# Add new records to the main dataframe
+df = pd.concat([df, pd.DataFrame(new_records)], ignore_index=True)
+# Fill NaN values with an empty string for all columns
+df = df.fillna('')
+
 # Streamlit app
 st.title("OLE Nepal Content Browser")
 
 # Sidebar filters
-st.sidebar.header("Filters")
+st.sidebar.header("Search and Filter")
+
+# Search bar in the main screen with a clear button
+with st.sidebar.form(key='search_form'):
+    search_query = st.text_input("Search content", "")
+    if st.form_submit_button("Clear Search"):
+        search_query = ""
+
+
 
 # Language selection dropdown
 language = st.sidebar.selectbox("Select Language", options=["English", "Nepali"])
@@ -139,11 +179,20 @@ for content_type in content_types:
 if selected_types:
     filtered_df = filtered_df[filtered_df['type'].isin(selected_types)]
 
+# Dropdown for "Doesn't exist in gradewise"
+not_in_gradewise_filter = st.sidebar.selectbox("Doesn't exist in gradewise", options=["All", "Yes", "No"])
+if not_in_gradewise_filter != "All":
+    filtered_df = filtered_df[filtered_df['not_in_gradewise'] == not_in_gradewise_filter]
+
 # Multi-select for Chapter
 chapters = filtered_df['chapter'].unique()
 selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapters, default=chapters)
 if selected_chapters:
     filtered_df = filtered_df[filtered_df['chapter'].isin(selected_chapters)]
+
+# Apply search filter
+if search_query:
+    filtered_df = filtered_df[filtered_df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
 
 # Display total count of activities
 st.write(f"### Total Activities: {len(filtered_df)}")
@@ -214,6 +263,13 @@ elif view == "Cards":
         rows = []
         grade_text = 'Grade' if language=="English" else 'कक्षा'
         view_content_text = ' View Lesson>>' if language=="English" else ' पाठ हेर्नुहोस्>>'
+
+        # Function to safely retrieve base64 image or return empty string
+        def safe_get_base64_image(image_path):
+            if image_path:
+                return get_base64_image(image_path)
+            else:
+                return ''
         # Function for Nepali numeral conversion with language condition
         def convert_to_nepali_numeral(text, language):
             if language == "Nepali":
@@ -244,8 +300,9 @@ elif view == "Cards":
                         <strong style="padding:10px"><a href="{row['content_link']}" target="_blank">{view_content_text}</a></strong>
                     </p>                                        
                     <p style="display: flex; justify-content: center;">
-                        <img src="data:image/png;base64,{get_base64_image(row['publisher_logo'])}" height="25" alt="Publisher logo"/>
+                        <img src="data:image/png;base64,{safe_get_base64_image(row['publisher_logo'])}" height="25" alt="Publisher logo"/>
                     </p>
+                     {'<p>Not in Gradewise</p>' if row.get('not_in_gradewise') == 'Yes' else '<p>Exists already</p>'}
                 </div>
                 """, axis=1).tolist()
             rows.append("".join(row_cards))
