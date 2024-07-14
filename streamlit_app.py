@@ -3,7 +3,6 @@ import json
 import streamlit as st
 import base64
 import requests
-from streamlit_modal import Modal
 
 # Helper function to convert image to base64
 @st.cache_data
