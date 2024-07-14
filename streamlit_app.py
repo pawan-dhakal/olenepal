@@ -1,12 +1,12 @@
 import pandas as pd
 import json
 import streamlit as st
-import altair as alt
 import base64
 import requests
-
+from streamlit_modal import Modal
 
 # Helper function to convert image to base64
+@st.cache_data
 def get_base64_image(image_path):
     if image_path.startswith('http://') or image_path.startswith('https://'):
         response = requests.get(image_path)
@@ -20,129 +20,27 @@ def get_base64_image(image_path):
             encoded_string = base64.b64encode(image_file.read()).decode()
         return encoded_string
 
-for_offline_use = False
+# Read all content including additional content from the JSON file
+df = pd.read_json('all_content.json', orient='records')
 
-def extract_content_from_json(file_path, records=[], for_offline_use=False):
-    """
-    returns appended records list 
-    """
-    with open(file_path, 'r', encoding='utf-8') as file:
-        data = json.load(file)
-    for grade, subjects in data.items():
-        for subject, contents_list in subjects.items():
-            for contents_list_no, contents in contents_list.items():
-                for content in contents:
-                    base_record = {
-                        'content_id': content.get('id'),  # main id of the content
-                        'title': content.get('title'),
-                        'type': content.get('type')
-                    }
-                    if content.get('type') == 'interactive': 
-                        record = base_record.copy()
-                        record.update({
-                            'grade': content.get('grade'),
-                            'subject': content.get('subject'),
-                            'chapter': content.get('chapter'),
-                            'chapter_slug': content.get('chapter_slug'),
-                            'content_link': content.get('offline_domain') + content.get('link_to_content') if for_offline_use else content.get('online_domain') + content.get('link_to_content'),
-                            'name': 'NA',  # not in 'interactive' type in json files, but in other types
-                            'file_id': 'NA',  # not in 'interactive' type in json files, but in other types
-                            'publisher_logo': 'http://172.18.96.1' + str(content.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(content.get('publisher_logo')),
-                        })
-                        records.append(record)
-                    elif content.get('type') == 'document' or content.get('type') == 'audio': 
-                        for file_info in content.get('file_upload', []):
-                            record = base_record.copy()
-                            record.update({
-                                'grade': file_info.get('grade'),
-                                'subject': file_info.get('subject'),
-                                'chapter': file_info.get('chapter'),
-                                'chapter_slug': file_info.get('chapter_slug'),
-                                'name': file_info.get('name'),
-                                'file_id': file_info.get('id'),
-                                'publisher_logo': 'http://172.18.96.1' + str(file_info.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('publisher_logo')),
-                                'content_link': 'http://172.18.96.1' + str(file_info.get('link')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('link'))
-                            })
-                            records.append(record)
-                    elif content.get('type') == 'video':
-                        # Determine the appropriate content source based on the offline/online flag
-                        source_key = 'file_upload' if for_offline_use else 'embed_link'
-                        base_url = 'http://172.18.96.1' if for_offline_use else ''  # youtube link in embed_link
-                        # Loop through the relevant content source and add records
-                        for file_info in content.get(source_key, []):
-                            record = base_record.copy()
-                            record.update({
-                                'grade': grade,  # file_info.get('grade'), #KA videos grade in record maybe different to grade specified in content.
-                                'subject': file_info.get('subject'),
-                                'chapter': file_info.get('chapter'),
-                                'chapter_slug': file_info.get('chapter_slug'),
-                                'name': file_info.get('name'),
-                                'file_id': file_info.get('id'),
-                                'content_link': base_url + str(file_info.get('link')),
-                                'publisher_logo': 'http://172.18.96.1' + str(content.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(content.get('publisher_logo')),
-                            })
-                            records.append(record)
-
-    return records
-
-# Process all files and concatenate the data
-file_paths = ['grade6.json', 'grade7.json', 'grade8.json', 'grade9.json', 'grade10.json', 'grade11.json', 'grade12.json']
-all_df = pd.DataFrame()
-for file_path in file_paths:
-    records = extract_content_from_json(file_path, for_offline_use=for_offline_use, records=[])
-    df = pd.DataFrame(records)
-    all_df = pd.concat([all_df, df], ignore_index=True)
-
-df = all_df  # redefining as df
-
-# Load additional content from CSV
-additional_content_df = pd.read_csv('additional_content.csv')
-
-# Check for existing content and add new content if it doesn't exist
-existing_links = set(df['content_link'].tolist())
-new_records = []
-
-for _, row in additional_content_df.iterrows():
-    if row['content_link'] not in existing_links:
-        # Find the corresponding chapter in the main dataframe
-        matching_chapter = df[df['chapter_slug'] == row['chapter_slug']]['chapter'].unique()
-        chapter = matching_chapter[0] if len(matching_chapter) > 0 else None
-        if chapter:
-            new_record = {
-                'title': row['title'],
-                'type': row['type'].lower(),
-                'grade': row['grade'],
-                'subject': row['subject'],
-                'content_link': row['content_link'],
-                'chapter_slug': row['chapter_slug'],
-                'chapter': chapter,
-                'not_in_gradewise':'Yes'
-            }
-            new_records.append(new_record)
-    else:
-        print(str(row['title'])+" already exists!")
-
-# Add new records to the main dataframe
-df = pd.concat([df, pd.DataFrame(new_records)], ignore_index=True)
-# Fill NaN values with an empty string for all columns
+# Fill NaN values with empty strings
 df = df.fillna('')
 
 # Streamlit app
 st.title("OLE Nepal Content Browser")
 
+# Navigation buttons in the main dashboard
+navigation_options = ["Cards View", "Table View"]
+navigation_choice = st.sidebar.radio("Select View", navigation_options, key="navigation_choice")
+
 # Sidebar filters
 st.sidebar.header("Search and Filter")
 
-# Search bar in the main screen with a clear button
-with st.sidebar.form(key='search_form'):
-    search_query = st.text_input("Search content", "")
-    if st.form_submit_button("Clear Search"):
-        search_query = ""
-
-
+# Search bar in the sidebar
+search_query = st.sidebar.text_input("Search subject, title or chapter: ", key="search_query")
 
 # Language selection dropdown
-language = st.sidebar.selectbox("Select Language", options=["English", "Nepali"])
+language = st.sidebar.selectbox("Select Language", options=["English", "Nepali"], key="language")
 
 # Function to parse subject and chapter based on selected language
 def parse_language(df, language):
@@ -157,233 +55,180 @@ def parse_language(df, language):
 # Apply language parsing
 df = parse_language(df, language)
 
-# Single-select for Grade
-grade = st.sidebar.selectbox("Select Grade", options=["All"] + list(df['grade'].unique()))
-if grade != "All":
-    filtered_df = df[df['grade'] == grade]
-else:
-    filtered_df = df.copy()
+# Filter by Grade
+grade_options = ["All"] + list(df['grade'].unique())
+grade_filter = st.sidebar.selectbox("Select Grade", options=grade_options, index=0, key="grade_filter")
+if grade_filter != "All":
+    df = df[df['grade'] == grade_filter]
 
-# Single-select for Subject
-subject = st.sidebar.selectbox("Select Subject", options=["All"] + list(filtered_df['subject'].unique()))
-if subject != "All":
-    filtered_df = filtered_df[filtered_df['subject'] == subject]
+# Filter by Subject
+subject_options = ["All"] + list(df['subject'].unique())
+subject_filter = st.sidebar.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter")
+if subject_filter != "All":
+    df = df[df['subject'] == subject_filter]
 
-# Multi-select for Content Type using checkboxes
-st.sidebar.subheader("Select Content Type")
+# Filter by Content Type
 content_types = df['type'].unique()
-selected_types = []
-for content_type in content_types:
-    if st.sidebar.checkbox(content_type, value=True):
-        selected_types.append(content_type)
+selected_types = st.sidebar.multiselect("Select Content Type", content_types, default=content_types, key="type_select")
 if selected_types:
-    filtered_df = filtered_df[filtered_df['type'].isin(selected_types)]
+    df = df[df['type'].isin(selected_types)]
 
-# Dropdown for "Doesn't exist in gradewise"
-not_in_gradewise_filter = st.sidebar.selectbox("Doesn't exist in gradewise", options=["All", "Yes", "No"])
+# Filter by "Doesn't exist in gradewise"
+not_in_gradewise_options = ["All", "Yes", "No"]
+not_in_gradewise_filter = st.sidebar.selectbox("Doesn't exist in gradewise", options=not_in_gradewise_options, index=0, key="not_in_gradewise_filter")
 if not_in_gradewise_filter != "All":
-    filtered_df = filtered_df[filtered_df['not_in_gradewise'] == not_in_gradewise_filter]
+    df = df[df['not_in_gradewise'] == not_in_gradewise_filter]
 
 # Multi-select for Chapter
-chapters = filtered_df['chapter'].unique()
-selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapters, default=chapters)
+chapter_options = list(df['chapter'].unique())
+selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapter_options, key="chapters_select")
 if selected_chapters:
-    filtered_df = filtered_df[filtered_df['chapter'].isin(selected_chapters)]
+    df = df[df['chapter'].isin(selected_chapters)]
 
 # Apply search filter
 if search_query:
-    filtered_df = filtered_df[filtered_df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
+    df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
 
-# Display total count of activities
-st.write(f"### Total Activities: {len(filtered_df)}")
+# Main navigation bar above content cards
+st.write("## Navigation Bar")
+st.write("Use the filters below to navigate content:")
+
+# Search bar for content cards or table view
+search_query = st.text_input("Search within content:", key="search_query_main")
+
+# Layout the filters and search bar in a row
+col1, col2 = st.columns([1, 1])
+
+# Filter by Grade
+with col1:
+    grade_options = ["All"] + list(df['grade'].unique())
+    grade_filter = st.selectbox("Select Grade", options=grade_options, index=0, key="grade_filter_main")
+    if grade_filter != "All":
+        df = df[df['grade'] == grade_filter]
+
+# Filter by Subject
+with col2:
+    subject_options = ["All"] + list(df['subject'].unique())
+    subject_filter = st.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter_main")
+    if subject_filter != "All":
+        df = df[df['subject'] == subject_filter]
+
+# Filter by Chapter
+# Multi-select for Chapter
+chapter_options = list(df['chapter'].unique())
+selected_chapters = st.multiselect("Select Chapter", options=chapter_options, key="chapters_select_main")
+if selected_chapters:
+    df = df[df['chapter'].isin(selected_chapters)]
+
+content_types = df['type'].unique()
+selected_types = st.multiselect("Select Content Type", content_types, default=content_types, key="type_select_main")
+if selected_types:
+    df = df[df['type'].isin(selected_types)]
+
+content_sources = df['content_source'].unique()
+selected_sources = st.multiselect("Select Content Source", content_sources, default=content_sources, key="source_select_main")
+if selected_sources:
+    df = df[df['content_source'].isin(selected_sources)]
+
+# Apply search filter
+if search_query:
+    df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
 
 # View selection buttons
-view = st.selectbox("Select View", options=["Cards", "Table", "Chart"])
-
-if view == "Table":
+if navigation_choice == "Table View":
     # Display filtered table with specific columns
-    st.write("### Filtered Data")
-    st.markdown("""
-    <style>
-        .dataframe {
-            width: 100%;
-            overflow-x: auto;
-        }
-        @media (max-width: 768px) {
-            .dataframe table {
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-        }
-    </style>
-    """, unsafe_allow_html=True)
-    st.dataframe(filtered_df[['title', 'grade', 'subject', 'chapter', 'content_link']], height=300)
+    st.write("## Filtered Data")
+    st.write(f"### Total Activities: {len(df)}")
 
-    # Add a download button
-    st.download_button(
-        label="Download data as CSV",
-        data=filtered_df.to_csv(index=False).encode('utf-8'),
-        file_name='filtered_data.csv',
-        mime='text/csv',
-    )
+    # Allow sorting by column
+    sort_column = st.selectbox('Sort by', df.columns)
+    ascending = st.checkbox('Ascending', True)
+    sorted_df = df.sort_values(by=sort_column, ascending=ascending)
 
-elif view == "Chart":
-    # Display Altair chart
-    st.write("### Content Distribution by Type")
-    chart = alt.Chart(filtered_df).mark_bar().encode(
-        x='type',
-        y='count()',
-        color='type'
-    ).properties(
-        width=600,
-        height=400
-    )
+    # Display the sorted dataframe
+    st.write(sorted_df[['title', 'grade', 'subject', 'chapter', 'content_link']])
 
-    st.altair_chart(chart, use_container_width=True)
+    # Add a download button for CSV
+    csv_data = sorted_df.to_csv(index=False).encode('utf-8')
+    st.download_button(label="Download data as CSV", data=csv_data, file_name='filtered_data.csv', mime='text/csv')
 
-elif view == "Cards":
-    # Initialize session state for pagination
-    if 'start_idx' not in st.session_state:
-        st.session_state.start_idx = 0
-    if 'batch_size' not in st.session_state:
-        st.session_state.batch_size = 9  # Display 9 cards per page (3 rows of 3 cards each)
+elif navigation_choice == "Cards View":
+    # Initial number of cards to display
+    initial_cards = 30
+    load_more_increment = 3
 
-    # Prepare base64 icons for the different content types
-    icons = {
-        'interactive': get_base64_image('interactive.png'),
-        'document': get_base64_image('document.png'),
-        'audio': get_base64_image('audio.png'),
-        'video': get_base64_image('video.png')
-    }
+    if "card_limit" not in st.session_state:
+        st.session_state.card_limit = initial_cards
+
+    # Function to load more cards
+    def load_more_cards():
+        st.session_state.card_limit += load_more_increment
+
+    # Display current batch of cards
+    end_idx = min(st.session_state.card_limit, len(df))
+    cards = df.iloc[:end_idx]
+    
+    # Display content cards
+    st.write("## Content Cards")
+    st.write(f"### Total Activities: {len(df)}, Displayed: {end_idx}")
+    
 
     
-    # Function to render content cards with modal popup
-    def render_content_cards(df, start_idx, batch_size):
-        rows = []
-        grade_text = 'Grade' if language=="English" else 'कक्षा'
-        view_content_text = ' View Lesson>>' if language=="English" else ' पाठ हेर्नुहोस्>>'
 
-        # Function to safely retrieve base64 image or return empty string
-        def safe_get_base64_image(image_path):
-            if image_path:
-                return get_base64_image(image_path)
-            else:
-                return ''
-        # Function for Nepali numeral conversion with language condition
-        def convert_to_nepali_numeral(text, language):
-            if language == "Nepali":
-                nepali_numerals = {
-                    "1": "१",
-                    "2": "२",
-                    "3": "३",
-                    "4": "४",
-                    "5": "५",
-                    "6": "६",
-                    "7": "७",
-                    "8": "८",
-                    "9": "९",
-                    "10": "१०",
-                    "11": "११",
-                    "12": "१२"
-                }
-                return nepali_numerals.get(text, text)
-            else:
-                return text
-        for i in range(start_idx, min(start_idx + batch_size, len(df)), 3):
-            row_cards = df.iloc[i:i+3].apply(lambda row: f"""
-                <div class="card">
-                    <h4 style="margin-left: 10px; align-items: center;">{row['title']}</h4>
-                    <p><strong>{grade_text} {convert_to_nepali_numeral(str(row['grade']), language)}, {row['subject']}, {row['chapter']}</strong></p>
-                    <p style="display: flex; align-items: center;">
-                        <img src="data:image/png;base64,{icons.get(row['type'], '')}" width="50" height="50" alt="{row['type']} icon"/>
-                        <strong style="padding:10px"><a href="{row['content_link']}" target="_blank">{view_content_text}</a></strong>
-                    </p>                                        
-                    <p style="display: flex; justify-content: center;">
-                        <img src="data:image/png;base64,{safe_get_base64_image(row['publisher_logo'])}" height="25" alt="Publisher logo"/>
-                    </p>
-                     {'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}
-                </div>
-                """, axis=1).tolist()
-            rows.append("".join(row_cards))
-        
-        st.markdown("""
-        <style>
-        .card {
-            border: 1px solid #e1e4e8; 
-            border-radius: 5px; 
-            padding: 10px; 
-            margin: 10px; 
-            width: calc(30% - 20px); 
-            float: left;
-        }
-        @media (max-width: 1200px) {
-            .card {
-                width: calc(40% - 20px);
-            }
-        }
-        @media (max-width: 768px) {
-            .card {
-                width: 100%;
-            }
-        }
-        #modal-container {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-        }
-        #modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            padding: 20px;
-            border-radius: 5px;
-            max-width: 80%;
-            max-height: 80%;
-            overflow: auto;
-        }
-        #close-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: red;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            cursor: pointer;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    # Define icons for different content types
+    content_type_icons = {
+        'audio': 'audio.png',
+        'video': 'video.png',
+        'interactive': 'interactive.png',
+        'document': 'document.png'
+    }
 
-        st.markdown("<div style='display: flex; flex-wrap: wrap;'>", unsafe_allow_html=True)
-        for row in rows:
-            st.markdown(row, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Prepare content for each card
+    for i in range(0, end_idx, 3):
+        cols = st.columns(3)
+        for j, col in enumerate(cols):
+            if i + j < end_idx:
+                row = cards.iloc[i + j]
+                content_type = row['type']
+                icon_path = content_type_icons.get(content_type, '')
 
-        
+                # Generate card content
+                card_content = f"""
+                    <div class="card">
+                        <p><img src="data:image/png;base64,{get_base64_image(icon_path)}" height="25" width="25" alt="Content Type"/><strong> {row['content_source']}</strong></p>
+                        <h4>{row['title']}</h4>
+                        <p><strong>Grade {row['grade']}, {row['subject']}, {row['chapter']}</strong></p>
+                        <p><strong><a href="{row['content_link']}" target="_blank">View Content</a></strong></p>
+                        {'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}
+                    </div>
+                """
+                col.markdown(card_content, unsafe_allow_html=True)
+    
+    # Info line showing loaded content count
+    st.write(f"Loaded {end_idx} out of {len(df)} content")
+    # Button to load more cards
+    load_more_cards()
+    if end_idx < len(df):
+        if st.button("Load more"):
+            load_more_cards()
 
-    # Display content cards with pagination
-    st.write("### Content Cards")
-
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
-        if st.session_state.start_idx > 0:
-            if st.button('Previous'):
-                st.session_state.start_idx = max(0, st.session_state.start_idx - st.session_state.batch_size)
-    with col2:
-        page_number = st.session_state.start_idx // st.session_state.batch_size + 1
-        total_pages = (len(filtered_df) - 1) // st.session_state.batch_size + 1
-        st.write(f"Page {page_number} of {total_pages}")
-    with col3:
-        if st.session_state.start_idx + st.session_state.batch_size < len(filtered_df):
-            if st.button('Next'):
-                st.session_state.start_idx = min(len(filtered_df) - st.session_state.batch_size, st.session_state.start_idx + st.session_state.batch_size)
-
-    render_content_cards(filtered_df, st.session_state.start_idx, st.session_state.batch_size)
+# Add CSS to style the cards
+st.markdown("""
+    <style>
+    .card {
+        border: 1px solid #e6e6e6;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 10px 0;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+    }
+    .card h4 {
+        margin: 0;
+    }
+    .card p {
+        margin: 5px 0;
+    }
+    </style>
+""", unsafe_allow_html=True)

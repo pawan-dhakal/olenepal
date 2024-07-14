@@ -1,0 +1,293 @@
+import pandas as pd
+import json
+import streamlit as st
+import base64
+import requests
+
+# Helper function to convert image to base64
+def get_base64_image(image_path):
+    if image_path.startswith('http://') or image_path.startswith('https://'):
+        response = requests.get(image_path)
+        if response.status_code == 200:
+            encoded_string = base64.b64encode(response.content).decode()
+            return encoded_string
+        else:
+            raise FileNotFoundError(f"URL returned status code {response.status_code}: {image_path}")
+    else:
+        with open(image_path, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        return encoded_string
+
+# Caching function to extract content from JSON files
+@st.cache_data
+def extract_content_from_json(file_paths, for_offline_use=False):
+    records = []
+    for file_path in file_paths:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            for grade, subjects in data.items():
+                for subject, contents_list in subjects.items():
+                    for contents_list_no, contents in contents_list.items():
+                        for content in contents:
+                            base_record = {
+                                'content_id': content.get('id'),
+                                'title': content.get('title'),
+                                'type': content.get('type')
+                            }
+                            if content.get('type') == 'interactive': 
+                                record = base_record.copy()
+                                record.update({
+                                    'grade': content.get('grade'),
+                                    'subject': content.get('subject'),
+                                    'chapter': content.get('chapter'),
+                                    'chapter_slug': content.get('chapter_slug'),
+                                    'content_link': content.get('offline_domain') + content.get('link_to_content') if for_offline_use else content.get('online_domain') + content.get('link_to_content'),
+                                    'name': 'NA',
+                                    'file_id': 'NA',
+                                    'publisher_logo': 'http://172.18.96.1' + str(content.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(content.get('publisher_logo')),
+                                })
+                                records.append(record)
+                            elif content.get('type') in ['document', 'audio']: 
+                                for file_info in content.get('file_upload', []):
+                                    record = base_record.copy()
+                                    record.update({
+                                        'grade': file_info.get('grade'),
+                                        'subject': file_info.get('subject'),
+                                        'chapter': file_info.get('chapter'),
+                                        'chapter_slug': file_info.get('chapter_slug'),
+                                        'name': file_info.get('name'),
+                                        'file_id': file_info.get('id'),
+                                        'publisher_logo': 'http://172.18.96.1' + str(file_info.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('publisher_logo')),
+                                        'content_link': 'http://172.18.96.1' + str(file_info.get('link')) if for_offline_use else 'https://pustakalaya.org' + str(file_info.get('link'))
+                                    })
+                                    records.append(record)
+                            elif content.get('type') == 'video':
+                                source_key = 'file_upload' if for_offline_use else 'embed_link'
+                                base_url = 'http://172.18.96.1' if for_offline_use else ''
+                                for file_info in content.get(source_key, []):
+                                    record = base_record.copy()
+                                    record.update({
+                                        'grade': grade,
+                                        'subject': file_info.get('subject'),
+                                        'chapter': file_info.get('chapter'),
+                                        'chapter_slug': file_info.get('chapter_slug'),
+                                        'name': file_info.get('name'),
+                                        'file_id': file_info.get('id'),
+                                        'content_link': base_url + str(file_info.get('link')),
+                                        'publisher_logo': 'http://172.18.96.1' + str(content.get('publisher_logo')) if for_offline_use else 'https://pustakalaya.org' + str(content.get('publisher_logo')),
+                                    })
+                                    records.append(record)
+    return records
+
+# Load and process JSON files
+file_paths = ['grade6.json', 'grade7.json', 'grade8.json', 'grade9.json', 'grade10.json', 'grade11.json', 'grade12.json']
+records = extract_content_from_json(file_paths, for_offline_use=False)
+df = pd.DataFrame(records)
+
+# Load additional content from CSV
+additional_content_df = pd.read_csv('additional_content.csv')
+
+# Check for and add new content if it doesn't exist
+existing_links = set(df['content_link'].tolist())
+new_records = []
+
+for _, row in additional_content_df.iterrows():
+    if row['content_link'] not in existing_links:
+        matching_chapter = df[df['chapter_slug'] == row['chapter_slug']]['chapter'].unique()
+        chapter = matching_chapter[0] if len(matching_chapter) > 0 else None
+        if chapter:
+            new_record = {
+                'title': row['title'],
+                'type': row['type'].lower(),
+                'grade': str(row['grade']),
+                'subject': row['subject'],
+                'content_link': row['content_link'],
+                'chapter_slug': row['chapter_slug'],
+                'chapter': chapter,
+                'not_in_gradewise': 'Yes'
+            }
+            new_records.append(new_record)
+    else:
+        print(f"{row['title']} already exists!")
+
+# Add new records to the main dataframe
+df = pd.concat([df, pd.DataFrame(new_records)], ignore_index=True)
+
+# Fill NaN values with empty strings
+df = df.fillna('')
+
+# Streamlit app
+st.title("OLE Nepal Content Browser")
+
+# Navigation buttons in the main dashboard
+navigation_options = ["Cards View", "Table View"]
+navigation_choice = st.sidebar.radio("Select View", navigation_options, key="navigation_choice")
+
+# Sidebar filters
+st.sidebar.header("Search and Filter")
+
+# Search bar in the sidebar
+search_query = st.sidebar.text_input("Search subject, title or chapter: ", key="search_query")
+
+# Language selection dropdown
+language = st.sidebar.selectbox("Select Language", options=["English", "Nepali"], key="language")
+
+# Function to parse subject and chapter based on selected language
+def parse_language(df, language):
+    if language == "English":
+        df['subject'] = df['subject'].apply(lambda x: x.split('[')[0].strip())
+        df['chapter'] = df['chapter'].apply(lambda x: x.split('[')[0].strip())
+    else:
+        df['subject'] = df['subject'].apply(lambda x: x.split('[[')[1].split(']]')[0].strip() if '[[' in x else x)
+        df['chapter'] = df['chapter'].apply(lambda x: x.split('[[')[1].split(']]')[0].strip() if '[[' in x else x)
+    return df
+
+# Apply language parsing
+df = parse_language(df, language)
+
+# Filter by Grade
+grade_options = ["All"] + list(df['grade'].unique())
+grade_filter = st.sidebar.selectbox("Select Grade", options=grade_options, index=0, key="grade_filter")
+if grade_filter != "All":
+    df = df[df['grade'] == grade_filter]
+
+# Filter by Subject
+subject_options = ["All"] + list(df['subject'].unique())
+subject_filter = st.sidebar.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter")
+if subject_filter != "All":
+    df = df[df['subject'] == subject_filter]
+
+# Filter by Content Type
+content_types = df['type'].unique()
+selected_types = st.sidebar.multiselect("Select Content Type", content_types, default=content_types, key="type_select")
+if selected_types:
+    df = df[df['type'].isin(selected_types)]
+
+# Filter by "Doesn't exist in gradewise"
+not_in_gradewise_options = ["All", "Yes", "No"]
+not_in_gradewise_filter = st.sidebar.selectbox("Doesn't exist in gradewise", options=not_in_gradewise_options, index=0, key="not_in_gradewise_filter")
+if not_in_gradewise_filter != "All":
+    df = df[df['not_in_gradewise'] == not_in_gradewise_filter]
+
+# Multi-select for Chapter
+chapter_options = list(df['chapter'].unique())
+selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapter_options, key="chapters_select")
+if selected_chapters:
+    df = df[df['chapter'].isin(selected_chapters)]
+
+# Apply search filter
+if search_query:
+    df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
+
+# Main navigation bar above content cards
+st.write("## Navigation Bar")
+st.write("Use the filters below to navigate content:")
+
+# Search bar for content cards or table view
+search_query = st.text_input("Search within content:", key="search_query_main")
+
+# Layout the filters and search bar in a row
+col1, col2, col3 = st.columns([1, 1, 1])
+
+
+# Filter by Grade
+with col1:
+    grade_options = ["All"] + list(df['grade'].unique())
+    grade_filter = st.selectbox("Select Grade", options=grade_options, index=0, key="grade_filter_main")
+    if grade_filter != "All":
+        df = df[df['grade'] == grade_filter]
+
+# Filter by Subject
+with col2:
+    subject_options = ["All"] + list(df['subject'].unique())
+    subject_filter = st.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter_main")
+    if subject_filter != "All":
+        df = df[df['subject'] == subject_filter]
+
+# Filter by Chapter
+with col3:
+    # Multi-select for Chapter
+    chapter_options = list(df['chapter'].unique())
+    selected_chapters = st.multiselect("Select Chapter", options=chapter_options, key="chapters_select_main")
+    if selected_chapters:
+        df = df[df['chapter'].isin(selected_chapters)]
+
+    
+content_types = df['type'].unique()
+selected_types = st.multiselect("Select Content Type", content_types, default=content_types, key="type_select_main")
+if selected_types:
+    df = df[df['type'].isin(selected_types)]
+
+# Apply search filter
+if search_query:
+    df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
+
+
+
+# View selection buttons
+if navigation_choice == "Table View":
+    # Display filtered table with specific columns
+    st.write("## Filtered Data")
+    st.write(f"### Total Activities: {len(df)}")
+    st.dataframe(df[['title', 'grade', 'subject', 'chapter', 'content_link']])
+
+    # Add a download button for CSV
+    csv_data = df.to_csv(index=False).encode('utf-8')
+    st.download_button(label="Download data as CSV", data=csv_data, file_name='filtered_data.csv', mime='text/csv')
+
+elif navigation_choice == "Cards View":
+    # Display content cards
+    st.write("## Content Cards")
+    st.write(f"### Total Activities: {len(df)}")
+
+    # Add CSS for card layout
+    st.markdown("""
+        <style>
+            .cards-container {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+            }
+            .card {
+                flex: 0 0 calc(33.33% - 20px); /* 3 cards per row */
+                margin: 10px;
+                padding: 10px;
+                border: 1px solid #e1e4e8;
+                border-radius: 5px;
+                box-sizing: border-box; /* Ensures padding is included in width */
+            }
+            @media (max-width: 1200px) {
+                .card {
+                    flex: 0 0 calc(50% - 20px); /* 2 cards per row on medium screens */
+                }
+            }
+            @media (max-width: 768px) {
+                .card {
+                    flex: 0 0 calc(100% - 20px); /* 1 card per row on small screens */
+                }
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Pagination logic
+    cards_per_page = 10
+    num_pages = (len(df) - 1) // cards_per_page + 1
+    page_number = st.selectbox("Select Page", range(1, num_pages + 1), index=0, key="page_number")
+
+    # Calculate start and end index for current page
+    start_idx = (page_number - 1) * cards_per_page
+    end_idx = min(start_idx + cards_per_page, len(df))
+
+    # Render content cards for the selected page
+    st.markdown('<div class="cards-container">', unsafe_allow_html=True)
+    for i, row in df.iloc[start_idx:end_idx].iterrows():
+        st.markdown(f"""
+            <div class="card">
+                <h4>{i + 1}. {row['title']}</h4>
+                <p><strong>Grade {row['grade']}, {row['subject']}, {row['chapter']}</strong></p>
+                <p><strong><a href="{row['content_link']}" target="_blank">View Lesson</a></strong></p>
+                <p><img src="data:image/png;base64,{get_base64_image(row['publisher_logo'])}" height="25" alt="Publisher logo"/></p>
+                {'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}
+            </div>
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
