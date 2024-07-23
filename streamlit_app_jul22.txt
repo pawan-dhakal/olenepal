@@ -28,13 +28,18 @@ df = df.fillna('')
 # Streamlit app
 st.title("OLE Nepal Content Browser")
 
+# Navigation buttons in the main dashboard
+navigation_options = ["Cards View", "Table View"]
+navigation_choice = st.sidebar.radio("Select View", navigation_options, key="navigation_choice")
 
-# Main navigation sidebar
+# Sidebar filters
 st.sidebar.header("Search and Filter")
-st.sidebar.write("Use the filters below to navigate content:")
+
+# Search bar in the sidebar
+search_query = st.sidebar.text_input("Search subject, title or chapter: ", key="search_query")
 
 # Language selection dropdown
-language = st.sidebar.selectbox("Select Language to Browse Content", options=["English", "Nepali"], key="language")
+language = st.sidebar.selectbox("Select Language", options=["English", "Nepali"], key="language")
 
 # Function to parse subject and chapter based on selected language
 def parse_language(df, language):
@@ -49,11 +54,49 @@ def parse_language(df, language):
 # Apply language parsing
 df = parse_language(df, language)
 
+# Filter by Grade
+grade_options = ["All"] + list(df['grade'].unique())
+grade_filter = st.sidebar.selectbox("Select Grade", options=grade_options, index=0, key="grade_filter")
+if grade_filter != "All":
+    df = df[df['grade'] == grade_filter]
+
+# Filter by Subject
+subject_options = ["All"] + list(df['subject'].unique())
+subject_filter = st.sidebar.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter")
+if subject_filter != "All":
+    df = df[df['subject'] == subject_filter]
+
+# Filter by Content Type
+content_types = df['type'].unique()
+selected_types = st.sidebar.multiselect("Select Content Type", content_types, default=content_types, key="type_select")
+if selected_types:
+    df = df[df['type'].isin(selected_types)]
+
+# Filter by "Doesn't exist in gradewise"
+not_in_gradewise_options = ["All", "Yes", "No"]
+not_in_gradewise_filter = st.sidebar.selectbox("Doesn't exist in gradewise", options=not_in_gradewise_options, index=0, key="not_in_gradewise_filter")
+if not_in_gradewise_filter != "All":
+    df = df[df['not_in_gradewise'] == not_in_gradewise_filter]
+
+# Multi-select for Chapter
+chapter_options = list(df['chapter'].unique())
+selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapter_options, key="chapters_select")
+if selected_chapters:
+    df = df[df['chapter'].isin(selected_chapters)]
+
+# Apply search filter
+if search_query:
+    df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
+
+# Main navigation bar above content cards
+st.write("## Navigation Bar")
+st.write("Use the filters below to navigate content:")
+
 # Search bar for content cards or table view
-search_query = st.sidebar.text_input("Search within content:", key="search_query_main")
+search_query = st.text_input("Search within content:", key="search_query_main")
 
 # Layout the filters and search bar in a row
-col1, col2 = st.sidebar.columns([1, 1])
+col1, col2 = st.columns([1, 1])
 
 # Filter by Grade
 with col1:
@@ -72,17 +115,17 @@ with col2:
 # Filter by Chapter
 # Multi-select for Chapter
 chapter_options = list(df['chapter'].unique())
-selected_chapters = st.sidebar.multiselect("Select Chapter", options=chapter_options, key="chapters_select_main")
+selected_chapters = st.multiselect("Select Chapter", options=chapter_options, key="chapters_select_main")
 if selected_chapters:
     df = df[df['chapter'].isin(selected_chapters)]
 
 content_types = df['type'].unique()
-selected_types = st.sidebar.multiselect("Select Content Type", content_types, default=content_types, key="type_select_main")
+selected_types = st.multiselect("Select Content Type", content_types, default=content_types, key="type_select_main")
 if selected_types:
     df = df[df['type'].isin(selected_types)]
 
 content_sources = df['content_source'].unique()
-selected_sources = st.sidebar.multiselect("Select Content Source", content_sources, default=content_sources, key="source_select_main")
+selected_sources = st.multiselect("Select Content Source", content_sources, default=content_sources, key="source_select_main")
 if selected_sources:
     df = df[df['content_source'].isin(selected_sources)]
 
@@ -90,21 +133,11 @@ if selected_sources:
 if search_query:
     df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
 
-# selection of view
-navigation_options = ["Cards View", "Table View"]
-navigation_choice = st.sidebar.radio("Select View", navigation_options, key="navigation_choice")
-
-# Filter by "Doesn't exist in gradewise"
-not_in_gradewise_options = ["All", "Yes", "No"]
-not_in_gradewise_filter = st.sidebar.selectbox("Doesn't exist in gradewise", options=not_in_gradewise_options, index=0, key="not_in_gradewise_filter")
-if not_in_gradewise_filter != "All":
-    df = df[df['not_in_gradewise'] == not_in_gradewise_filter]
-
 # View selection buttons
 if navigation_choice == "Table View":
     # Display filtered table with specific columns
     st.write("## Filtered Data")
-    st.write(f"### Total Content: {len(df)}")
+    st.write(f"### Total Activities: {len(df)}")
 
     # Allow sorting by column
     sort_column = st.selectbox('Sort by', df.columns)
@@ -136,7 +169,7 @@ elif navigation_choice == "Cards View":
     
     # Display content cards
     st.write("## Content Cards")
-    st.write(f"### Total Content: {len(df)}, Displayed: {end_idx}")
+    st.write(f"### Total Activities: {len(df)}, Displayed: {end_idx}")
     
 
     
@@ -161,7 +194,7 @@ elif navigation_choice == "Cards View":
                 # Generate card content
                 card_content = f"""
                     <div class="card">
-                        <p><img src="data:image/png;base64,{get_base64_image(icon_path) if icon_path != '' else 'N'}" height="25" width="25" alt="Content Type"/><strong> {row['content_source']}</strong></p>
+                        <p><img src="data:image/png;base64,{get_base64_image(icon_path)}" height="25" width="25" alt="Content Type"/><strong> {row['content_source']}</strong></p>
                         <h4>{row['title']}</h4>
                         <p><strong>Grade {row['grade']}, {row['subject']}, {row['chapter']}</strong></p>
                         <p><strong><a href="{row['content_link']}" target="_blank">View Content</a></strong></p>
