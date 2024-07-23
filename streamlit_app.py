@@ -50,24 +50,28 @@ def parse_language(df, language):
 df = parse_language(df, language)
 
 # Search bar for content cards or table view
-search_query = st.sidebar.text_input("Search within content:", key="search_query_main")
+# Search bar for content cards or table view
+col1, col2 = st.sidebar.columns([3, 1])
+search_query = col1.text_input("Search within content:", key="search_query_main")
+search_button = col2.button("Search")
 
-# Layout the filters and search bar in a row
-col1, col2 = st.sidebar.columns([1, 1])
+# Apply search filter if search button is clicked
+if search_button and search_query:
+    df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
 
-# Filter by Grade
-with col1:
-    grade_options = ["All"] + list(df['grade'].unique())
-    grade_filter = st.selectbox("Select Grade", options=grade_options, index=0, key="grade_filter_main")
-    if grade_filter != "All":
-        df = df[df['grade'] == grade_filter]
+
+
+grade_options = ["All"] + list(df['grade'].unique())
+selected_grades = st.sidebar.multiselect("Select Grade", options=grade_options, key="grade_filter_main")
+if selected_grades:
+    df = df[df['grade'].isin(selected_grades)]
+
 
 # Filter by Subject
-with col2:
-    subject_options = ["All"] + list(df['subject'].unique())
-    subject_filter = st.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter_main")
-    if subject_filter != "All":
-        df = df[df['subject'] == subject_filter]
+subject_options = ["All"] + list(df['subject'].unique())
+subject_filter = st.sidebar.selectbox("Select Subject", options=subject_options, index=0, key="subject_filter_main")
+if subject_filter != "All":
+    df = df[df['subject'] == subject_filter]
 
 # Filter by Chapter
 # Multi-select for Chapter
