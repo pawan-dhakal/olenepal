@@ -51,9 +51,9 @@ df = parse_language(df, language)
 
 # Search bar for content cards or table view
 # Search bar for content cards or table view
-col1, col2 = st.sidebar.columns([3, 1])
-search_query = col1.text_input("Search within content:", key="search_query_main")
-search_button = col2.button("Search")
+#col1, col2 = st.sidebar.columns([3, 1])
+search_query = st.sidebar.text_input("Search within content:", key="search_query_main")
+search_button = st.sidebar.button("Search")
 
 # Apply search filter if search button is clicked
 if search_button and search_query:
@@ -107,7 +107,7 @@ if not_in_gradewise_filter != "All":
 # View selection buttons
 if navigation_choice == "Table View":
     # Display filtered table with specific columns
-    st.write("## Filtered Data")
+    #st.write("## Filtered Data")
     st.write(f"### Total Content: {len(df)}")
 
     # Allow sorting by column
@@ -139,7 +139,7 @@ elif navigation_choice == "Cards View":
     cards = df.iloc[:end_idx]
     
     # Display content cards
-    st.write("## Content Cards")
+    #st.write("## Content Cards")
     st.write(f"### Total Content: {len(df)}, Displayed: {end_idx}")
     
 
