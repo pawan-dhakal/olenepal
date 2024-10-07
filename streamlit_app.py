@@ -30,7 +30,7 @@ df = df.fillna('')
 labels = {
     "title": {"English": "Gradewise Learning 6-10", "Nepali": "कक्षागत सिकाइ ६-१०"},
     "search_filter": {"English": "Search and Filter", "Nepali": "खोज्‍नुहोस् र फिल्टर गर्नुहोस्"},
-    "filter_instruction": {"English": "Use the filters below to navigate content:", "Nepali": "तलका फिल्टरहरू प्रयोग गरी सामग्री खोज्‍नुहोस्ः"},
+    "filter_instruction": {"English": "Use the filters below to navigate content", "Nepali": "तलका फिल्टरहरू प्रयोग गरी सामग्री खोज्‍नुहोस्"},
     "search_label": {"English": "Search within content:", "Nepali": "सामग्री खोज्‍नुहोस्:"},
     "select_grade": {"English": "Select Grade", "Nepali": "कक्षा छान्‍नुहोस्"},
     "select_subject": {"English": "Select Subject", "Nepali": "विषय छान्‍नुहोस्"},
