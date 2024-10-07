@@ -31,7 +31,7 @@ labels = {
     "title": {"English": "Gradewise Learning 6-10", "Nepali": "कक्षागत सिकाइ ६-१०"},
     "search_filter": {"English": "Search and Filter", "Nepali": "खोज्‍नुहोस् र फिल्टर गर्नुहोस्"},
     "filter_instruction": {"English": "Use the filters below to navigate content:", "Nepali": "तलका फिल्टरहरू प्रयोग गरी सामग्री खोज्‍नुहोस्ः"},
-    "search_label": {"English": "Search within content:", "Nepali": "सामग्री भित्र खोज्‍नुहोस्:"},
+    "search_label": {"English": "Search within content:", "Nepali": "सामग्री खोज्‍नुहोस्:"},
     "select_grade": {"English": "Select Grade", "Nepali": "कक्षा छान्‍नुहोस्"},
     "select_subject": {"English": "Select Subject", "Nepali": "विषय छान्‍नुहोस्"},
     "select_chapter": {"English": "Select Chapter", "Nepali": "पाठ छान्‍नुहोस्"},
@@ -43,11 +43,12 @@ labels = {
     "download_data": {"English": "Download data as CSV", "Nepali": "CSV को रूपमा डेटा डाउनलोड गर्नुहोस्"},
     "load_more": {"English": "Load more content", "Nepali": "थप सामग्री लोड गर्नुहोस्"},
     "search_btn_text": {"English": "Search", "Nepali": "खोज्‍नुहोस्"},
-    "reset_btn_text": {"English": "Reset", "Nepali": "रिसेट खोज्‍नुहोस्"},
+    "reset_btn_text": {"English": "Reset", "Nepali": "रिसेट गर्नुहोस्"},
     "browse_lang_text": {"English": "Select Language to Browse Content", "Nepali": "सामग्री खोज्‍ने भाषा छान्‍नुहोस्"},
     "card_view_label": {"English": "Card View", "Nepali": "सामग्रीको कार्ड सूची"},
     "table_view_label": {"English": "Table View", "Nepali": "सामग्रीको तालिका सूची"},
     "grade_text_only": {"English": "Grade", "Nepali": "कक्षा"},
+    "all_text" : {"English": "All", "Nepali": "सबै"},
 }
 
 # Define content type and source translations
@@ -112,16 +113,16 @@ if search_button or search_query:
 
 
 
-grade_options = ["All"] + list(df['grade'].unique())
+grade_options = [labels["all_text"][language]] + list(df['grade'].unique())
 selected_grades = st.sidebar.multiselect(labels["select_grade"][language], options=grade_options, key="grade_filter_main")
 if selected_grades:
     df = df[df['grade'].isin(selected_grades)]
 
 
 # Filter by Subject
-subject_options = ["All"] + list(df['subject'].unique())
+subject_options = [labels["all_text"][language]] + list(df['subject'].unique())
 subject_filter = st.sidebar.selectbox(labels["select_subject"][language], options=subject_options, index=0, key="subject_filter_main")
-if subject_filter != "All":
+if subject_filter != labels["all_text"][language]:
     df = df[df['subject'] == subject_filter]
 
 # Filter by Chapter
