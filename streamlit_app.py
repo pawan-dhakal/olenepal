@@ -49,6 +49,8 @@ labels = {
     "table_view_label": {"English": "Table View", "Nepali": "सामग्रीको तालिका सूची"},
     "grade_text_only": {"English": "Grade", "Nepali": "कक्षा"},
     "all_text" : {"English": "All", "Nepali": "सबै"},
+    "choose_an_option" : {"English": "Choose an option", "Nepali": "विकल्प छान्‍नुहोस्"},
+    "learn_now_text" : {"English": "Learn now >>", "Nepali": "सिकौँ >>"},
 }
 
 # Define content type and source translations
@@ -114,31 +116,31 @@ if search_button or search_query:
 
 
 grade_options = [labels["all_text"][language]] + list(df['grade'].unique())
-selected_grades = st.sidebar.multiselect(labels["select_grade"][language], options=grade_options, key="grade_filter_main")
+selected_grades = st.sidebar.multiselect(labels["select_grade"][language], options=grade_options, key="grade_filter_main",placeholder=labels["choose_an_option"][language])
 if selected_grades:
     df = df[df['grade'].isin(selected_grades)]
 
 
 # Filter by Subject
 subject_options = [labels["all_text"][language]] + list(df['subject'].unique())
-subject_filter = st.sidebar.selectbox(labels["select_subject"][language], options=subject_options, index=0, key="subject_filter_main")
+subject_filter = st.sidebar.selectbox(labels["select_subject"][language], options=subject_options, index=0, key="subject_filter_main", placeholder=labels["choose_an_option"][language])
 if subject_filter != labels["all_text"][language]:
     df = df[df['subject'] == subject_filter]
 
 # Filter by Chapter
 # Multi-select for Chapter
 chapter_options = list(df['chapter'].unique())
-selected_chapters = st.sidebar.multiselect(labels["select_chapter"][language], options=chapter_options, key="chapters_select_main")
+selected_chapters = st.sidebar.multiselect(labels["select_chapter"][language], options=chapter_options, key="chapters_select_main",placeholder=labels["choose_an_option"][language])
 if selected_chapters:
     df = df[df['chapter'].isin(selected_chapters)]
 
 content_types = df['type'].unique()
-selected_types = st.sidebar.multiselect(labels["select_content_type"][language], content_types, default=content_types, key="type_select_main")
+selected_types = st.sidebar.multiselect(labels["select_content_type"][language], content_types, default=content_types, key="type_select_main",placeholder=labels["choose_an_option"][language])
 if selected_types:
     df = df[df['type'].isin(selected_types)]
 
 content_sources = df['content_source'].unique()
-selected_sources = st.sidebar.multiselect(labels["select_content_source"][language], content_sources, default=content_sources, key="source_select_main")
+selected_sources = st.sidebar.multiselect(labels["select_content_source"][language], content_sources, default=content_sources, key="source_select_main",placeholder=labels["choose_an_option"][language])
 if selected_sources:
     df = df[df['content_source'].isin(selected_sources)]
 
@@ -164,22 +166,70 @@ if search_button1 or search_query1:
 
 
 # View selection buttons
+# Define a dictionary for column translations
+column_labels = {
+    'title': {
+        'English': 'Title',
+        'Nepali': 'शिर्षक'
+    },
+    'grade': {
+        'English': 'Grade',
+        'Nepali': 'कक्षा'
+    },
+    'subject': {
+        'English': 'Subject',
+        'Nepali': 'विषय'
+    },
+    'chapter': {
+        'English': 'Chapter',
+        'Nepali': 'पाठ'
+    },
+    'content_link': {
+        'English': 'Content Link',
+        'Nepali': 'सामग्री लिङ्क'
+    }
+}
+
+# Create a mapping for sorting options to their actual column names
+sort_options = {
+    column_labels['title'][language]: 'title',
+    column_labels['grade'][language]: 'grade',
+    column_labels['subject'][language]: 'subject',
+    column_labels['chapter'][language]: 'chapter'
+}
+
 if navigation_choice == labels["table_view_label"][language]:
     # Display filtered table with specific columns
-    #st.write("## Filtered Data")
     st.write(f"### {labels['total_content'][language]}: {len(df)}")
 
-    # Allow sorting by column
-    sort_column = st.selectbox('Sort by', df.columns)
+    # Allow sorting by specific columns using displayed labels
+    sort_column_label = st.selectbox('Sort by', list(sort_options.keys()))
     ascending = st.checkbox('Ascending', True)
+
+    # Get the actual column name from the selected label
+    sort_column = sort_options[sort_column_label]
+
+    # Sort the DataFrame using actual column names
     sorted_df = df.sort_values(by=sort_column, ascending=ascending)
 
-    # Display the sorted dataframe
-    st.write(sorted_df[['title', 'grade', 'subject', 'chapter', 'content_link']])
+    # Get the displayed column names for the sorted DataFrame
+    displayed_columns = [
+        column_labels['title'][language],
+        column_labels['grade'][language],
+        column_labels['subject'][language],
+        column_labels['chapter'][language],
+        column_labels['content_link'][language]
+    ]
+
+    # Create a list of the actual DataFrame column names
+    actual_columns = ['title', 'grade', 'subject', 'chapter', 'content_link']
+
+    # Display the sorted DataFrame using the actual column names
+    st.write(sorted_df[actual_columns].rename(columns=dict(zip(actual_columns, displayed_columns))))
 
     # Add a download button for CSV
-    csv_data = sorted_df.to_csv(index=False).encode('utf-8')
-    st.download_button(label="Download data as CSV", data=csv_data, file_name='filtered_data.csv', mime='text/csv')
+    #csv_data = sorted_df.to_csv(index=False).encode('utf-8')
+    #st.download_button(label="Download data as CSV", data=csv_data, file_name='filtered_data.csv', mime='text/csv')
 
 elif navigation_choice == labels["card_view_label"][language]:
     # Initial number of cards to display
@@ -231,10 +281,10 @@ elif navigation_choice == labels["card_view_label"][language]:
                 # Generate card content
                 card_content = f"""
                     <div class="card">
-                        <p><img src="data:image/png;base64,{get_base64_image(icon_path) if icon_path != '' else 'N'}" height="25" width="25" alt="Content Type"/><strong> {row['content_source']}</strong></p>
-                        <h4>{row['title']}</h4>
-                        <p><strong>{labels["grade_text_only"][language]} {row['grade']}, {row['subject']}, {row['chapter']}</strong></p>
-                        <p><strong><a href="{row['content_link']}" target="_blank">View Content</a></strong></p>
+                        <p><img src="data:image/png;base64,{get_base64_image(icon_path) if icon_path != '' else 'N'}" height="40" width="40" alt="Content Type"/><strong> {row['content_source']}</strong></p>
+                        <h5>{row['title']}</h5>
+                        <p>{labels["grade_text_only"][language]} {row['grade']}, {row['subject']}, {row['chapter']}</p>
+                        <p><a href="{row['content_link']}" target="_blank">{labels["learn_now_text"][language]}</a></p>
                         {'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}
                     </div>
                 """
@@ -268,3 +318,25 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+
+# Footer section
+# Footer section
+footer = """
+<style>
+.footer {
+    position: relative;  
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    padding: 10px;
+    font-size: 14px;
+}
+</style>
+<div class="footer">
+    <p>© 2024 Open Learning Exchange Nepal | <a href="https://olenepal.org" target="_blank">olenepal.org</a></p>
+</div>
+"""
+
+st.markdown(footer, unsafe_allow_html=True)
