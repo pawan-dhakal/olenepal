@@ -4,6 +4,9 @@ import streamlit as st
 import base64
 import requests
 
+# change to True for offline server
+for_offline_use = False 
+
 # Helper function to convert image to base64
 @st.cache_data
 def get_base64_image(image_path):
@@ -20,7 +23,10 @@ def get_base64_image(image_path):
         return encoded_string
 
 # Read all content including additional content from the JSON file
-df = pd.read_json('all_content.json', orient='records')
+if for_offline_use:
+    df = pd.read_json('all_content_offline.json', orient='records')
+else:
+    df = pd.read_json('all_content_online.json', orient='records')
 
 # Fill NaN values with empty strings
 df = df.fillna('')
