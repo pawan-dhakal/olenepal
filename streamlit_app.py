@@ -65,13 +65,18 @@ labels = {
     "all_text" : {"English": "All", "Nepali": "सबै"},
     "choose_an_option" : {"English": "Choose an option", "Nepali": "विकल्प छान्‍नुहोस्"},
     "learn_now_text" : {"English": "Learn now >>", "Nepali": "सिकौँ >>"},
+    "ascending_text" : {"English": "Ascending Order", "Nepali": "बढ्दो क्रम"},
+    "sort_by_text" : {"English": "Sort by :", "Nepali": "क्रमबद्ध सूची निर्माण गर्ने विकल्प :"},
 }
+
 
 # Define content type and source translations
 content_type_source_labels = {
     "document": {"English":"Document","Nepali":"किताब"},
     "video": {"English":"Video","Nepali":"भिडियो"},
     "audio": {"English":"Audio","Nepali":"अडियो"},
+    "Audio Book": {"English":"Audio Book","Nepali":"अडियो किताब"},
+    "Book": {"English":"Book","Nepali":"किताब"},
     "interactive": {"English":"Interactive","Nepali":"अन्तर्क्रियात्मक"},
     "Textbook": {"English":"Textbook","Nepali":"पाठ्यपुस्तक"},
     "E-Paath": {"English":"E-Paath","Nepali":"ई-पाठ"},
@@ -222,7 +227,7 @@ if navigation_choice == labels["table_view_label"][language]:
     st.write(f"### {labels['total_content'][language]}: {len(df)}")
 
     # Allow sorting by specific columns using displayed labels
-    sort_column_label = st.selectbox('Sort by', list(sort_options.keys()))
+    sort_column_label = st.selectbox(labels["sort_by_text"][language], list(sort_options.keys()))
     ascending = st.checkbox('Ascending', True)
 
     # Get the actual column name from the selected label
