@@ -7,6 +7,14 @@ import requests
 # change to True for offline server
 for_offline_use = False 
 
+# Set page properties with an appropriate icon for digital learning content
+st.set_page_config(
+    page_title="Gradewise Learning 6-10",
+    page_icon="📚",                    # A book emoji, representing learning
+    layout="centered",
+    initial_sidebar_state="expanded"
+) 
+
 # Helper function to convert image to base64
 @st.cache_data
 def get_base64_image(image_path):
@@ -119,10 +127,15 @@ if search_button or search_query:
     df = df[df.apply(lambda row: search_query.lower() in str(row['title']).lower() or search_query.lower() in str(row['subject']).lower() or search_query.lower() in str(row['chapter']).lower(), axis=1)]
 
 
+# grades 6-10 only
+# Convert grades to integers (if possible), ignoring any errors that might occur
+# Convert grades to integers for display purposes (ignoring NaN values)
+df['grade'] = pd.to_numeric(df['grade'], errors='coerce').astype('Int64')  # Use 'Int64' to allow for NaN values
 
 # grades 6-10 only
-grade_options = [labels["all_text"][language]] + [g for g in df['grade'].unique() if g <= 10]
-selected_grades = st.sidebar.multiselect(labels["select_grade"][language], options=grade_options, key="grade_filter_main",placeholder=labels["choose_an_option"][language])
+grade_options = [labels["all_text"][language]] + [int(g) for g in df['grade'].dropna().unique() if g <= 10]
+selected_grades = st.sidebar.multiselect(labels["select_grade"][language], options=grade_options, key="grade_filter_main", placeholder=labels["choose_an_option"][language])
+
 if selected_grades:
     df = df[df['grade'].isin(selected_grades)]
 
