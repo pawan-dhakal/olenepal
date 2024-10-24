@@ -120,8 +120,8 @@ if search_button or search_query:
 
 
 
-
-grade_options = [labels["all_text"][language]] + list(df['grade'].unique())
+# grades 6-10 only
+grade_options = [labels["all_text"][language]] + [g for g in df['grade'].unique() if g <= 10]
 selected_grades = st.sidebar.multiselect(labels["select_grade"][language], options=grade_options, key="grade_filter_main",placeholder=labels["choose_an_option"][language])
 if selected_grades:
     df = df[df['grade'].isin(selected_grades)]
