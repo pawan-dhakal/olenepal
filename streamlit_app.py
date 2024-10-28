@@ -309,17 +309,20 @@ elif navigation_choice == labels["card_view_label"][language]:
                         <h5>{row['title']}</h5>
                         <p>{labels["grade_text_only"][language]} {row['grade']}, {row['subject']}, {row['chapter']}</p>
                         <p><a href="{row['content_link']}" target="_blank">{labels["learn_now_text"][language]}</a></p>
-                        {'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}
+                        <!--{'<p><strong>Not in Gradewise</strong></p>' if row.get('not_in_gradewise') == 'Yes' else ''}-->
                     </div>
                 """
                 col.markdown(card_content, unsafe_allow_html=True)
     
     # Info line showing loaded content count
-    st.write(f"Loaded {end_idx} out of {len(df)} content")
+    if language == "English":
+        st.write(f"Loaded {end_idx} out of {len(df)} content")
+    else:
+        st.write(f"जम्मा सामग्री: {len(df)}, देखाइएको सामग्री: {end_idx} ")
     # Button to load more cards
     load_more_cards()
     if end_idx < len(df):
-        if st.button("Load more"):
+        if st.button(labels["load_more"][language]):
             load_more_cards()
 
 # Add CSS to style the cards
